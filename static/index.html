@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unicode 标识符规范化工作台</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header>
+  <h1>Unicode 标识符碰撞工作台</h1>
+  <div id="tableinfo" class="muted">读取表版本中…</div>
+</header>
+
+<nav>
+  <button data-tab="rules" class="active">规则集</button>
+  <button data-tab="import">导入</button>
+  <button data-tab="analysis">分析</button>
+  <button data-tab="plans">迁移方案</button>
+  <button data-tab="search">搜索 / 版本比较</button>
+</nav>
+
+<main>
+<section id="tab-rules" class="tab active">
+  <h2>规则集</h2>
+  <form id="ruleset-form">
+    <label>名称 <input name="label" value="默认规则" required></label>
+    <label><input type="checkbox" name="case_fold" checked> 大小写折叠（default case fold）</label>
+    <label>规范化
+      <select name="normalization"><option>NFC</option><option>NFKC</option></select>
+    </label>
+    <label><input type="checkbox" name="strip_default_ignorable" checked> 移除默认可忽略字符（Default_Ignorable）</label>
+    <label>脚本限制（ISO-15924，可空）<input name="restrict_script" placeholder="如 Latn / Cyrl"></label>
+    <button type="submit">创建规则集</button>
+  </form>
+  <div id="rulesets"></div>
+  <form id="upgrade-form" class="inline">
+    <button type="submit">用当前二进制表升级规则表（新 revision）</button>
+    <input name="note" placeholder="升级说明，如 upstream 17.0 数据">
+  </form>
+</section>
+
+<section id="tab-import" class="tab">
+  <h2>导入字符串集合</h2>
+  <p class="muted">每行一条：<code>记录号⇥原文</code>（TAB 分隔）。原文字节永久保留；规范化结果另存为新版本。</p>
+  <form id="import-form">
+    <label>集合名称 <input name="label" value="示例集合" required></label>
+    <textarea name="text" rows="10" spellcheck="false"></textarea>
+    <button type="submit">导入</button>
+  </form>
+  <div id="datasets"></div>
+</section>
+
+<section id="tab-analysis" class="tab">
+  <h2>分析与分桶</h2>
+  <div class="row">
+    <select id="analysis-dataset"></select>
+    <select id="analysis-ruleset"></select>
+    <button id="build-analysis">构建分析（新版本，不改写旧值）</button>
+  </div>
+  <div id="analyses"></div>
+  <div class="filters">
+    <h3>查看分析 <select id="view-analysis"></select></h3>
+    <label>阶段筛选
+      <select id="stage-filter">
+        <option value="">全部阶段</option>
+        <option value="raw">raw（原始解码）</option>
+        <option value="scalars">scalars</option>
+        <option value="case_fold">case_fold</option>
+        <option value="strip_ignorable">strip_ignorable</option>
+        <option value="normalize">normalize</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="issue-only"> 只看有问题的记录</label>
+    <label>记录号 <input id="record-filter" placeholder="精确记录号"></label>
+    <button id="apply-filters">应用筛选</button>
+  </div>
+  <div id="buckets"></div>
+  <div id="records"></div>
+</section>
+
+<section id="tab-plans" class="tab">
+  <h2>迁移方案</h2>
+  <div class="row">
+    <select id="plan-analysis"></select>
+    <button id="create-plan">为分析创建方案（草稿）</button>
+    <select id="view-plan"></select>
+  </div>
+  <div class="muted">冲突组决策：rename（重命名）/ keep_alias（保留旧别名）/ reject（拒绝迁移）。重复原文桶不视为冲突；视觉相似永不自动等价。</div>
+  <div id="plan-detail"></div>
+  <div class="row">
+    <button id="simulate-plan">模拟（含新记录试算）</button>
+    <input id="extra-records" placeholder="新增标识符，逗号分隔；任何碰撞即全有或全无失败">
+    <button id="approve-plan">校验并提交（版本号乐观锁）</button>
+  </div>
+  <pre id="sim-output" class="output"></pre>
+</section>
+
+<section id="tab-search" class="tab">
+  <h2>搜索与 Unicode 版本比较</h2>
+  <div class="row">
+    <select id="search-analysis"></select>
+    <input id="search-q" placeholder="查询原文；查询自身也按当前规则处理但保留原文">
+    <button id="search-btn">搜索</button>
+  </div>
+  <pre id="search-output" class="output"></pre>
+  <div class="row">
+    分析 A <select id="compare-a"></select>
+    分析 B <select id="compare-b"></select>
+    <button id="compare-btn">比较两个分析（不同 revision）</button>
+  </div>
+  <pre id="compare-output" class="output"></pre>
+  <div class="row">
+    方案 <select id="export-plan"></select>
+    <button id="export-btn">确定性导出（含规则快照/映射/决定 + SHA-256）</button>
+  </div>
+  <pre id="export-output" class="output"></pre>
+</section>
+</main>
+<dialog id="err-dialog"><pre id="err-text"></pre><button id="err-close">关闭</button></dialog>
+<script src="/static/app.js"></script>
+</body>
+</html>
