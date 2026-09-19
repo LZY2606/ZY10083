@@ -1,0 +1,19 @@
+[package]
+name = "unicode-collision-workbench"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[dependencies]
+icu_casemap = "2.3"
+icu_normalizer = "2.3"
+icu_properties = "2.3"
+icu_casemap_old = { package = "icu_casemap", version = "1.5" }
+icu_normalizer_old = { package = "icu_normalizer", version = "1.5" }
+icu_properties_old = { package = "icu_properties", version = "1.5" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Unicode 规范化碰撞工作台</title>
+  <style>
+    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f7f9;color:#17202a}
+    header{background:#102033;color:white;padding:20px 28px}main{padding:24px;max-width:1280px;margin:auto;display:grid;gap:18px}
+    section{background:white;border:1px solid #d8dee8;border-radius:10px;padding:18px;box-shadow:0 1px 2px #0001}
+    textarea,input,select,button{font:inherit;padding:8px;border:1px solid #aeb8c6;border-radius:6px}textarea{width:100%;min-height:74px;box-sizing:border-box}
+    button{background:#175cd3;color:white;border-color:#175cd3;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0b1523;color:#d7e3f4;padding:12px;border-radius:8px;max-height:520px;overflow:auto}
+    table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid #e2e6ee;padding:7px;text-align:left;vertical-align:top}th{background:#f1f4f8}.pill{display:inline-block;padding:2px 7px;border-radius:99px;background:#e8f0fe;margin:2px}.warn{background:#fff2d8}.bad{background:#fde8e8}.ok{background:#e8f8ef}
+  </style>
+</head>
+<body>
+<header><h1>Unicode 规范化碰撞工作台</h1><div>原文保留；碰撞只是候选；视觉相似不等价。</div></header>
+<main>
+  <section>
+    <h2>规则</h2>
+    <div class="grid">
+      <label>Unicode 版本<select id="table"><option value="u16-0">16.0.0</option><option value="u15-1">15.1.0</option></select></label>
+      <label>规范化<select id="norm"><option value="NFC">NFC</option><option value="NFKC">NFKC</option></select></label>
+      <label>大小写折叠<input id="fold" type="checkbox" checked></label>
+      <label>移除默认可忽略字符<input id="ignore" type="checkbox"></label>
+      <label>脚本限制<select id="script"><option value="off">不限制（仅提示混合）</option><option value="single">单脚本</option><option value="allowed">允许清单</option></select></label>
+    </div>
+    <input id="allowed" placeholder="允许脚本，逗号分隔，如 Latin,Greek" style="width:100%;margin-top:10px">
+  </section>
+  <section>
+    <h2>搜索：查询自身也按当前规则处理</h2>
+    <div class="row"><textarea id="query" placeholder="输入查询原文"></textarea><button onclick="runQuery()">规范化查询</button></div>
+    <pre id="queryResult">尚未运行</pre>
+  </section>
+  <section>
+    <h2>导入稳定记录</h2>
+    <textarea id="datasetName" placeholder="集合名称" style="min-height:auto;width:280px"></textarea>
+    <textarea id="import" placeholder='[{"id":"r1","text":"Straße"},{"id":"r2","text":"STRASSE"}]'></textarea>
+    <div class="row"><button onclick="createDataset()">创建集合（重复请求可带 Idempotency-Key）</button><button onclick="refreshDatasets()">刷新</button><span id="datasetId"></span></div>
+    <pre id="datasetResult"></pre>
+  </section>
+  <section>
+    <h2>逐阶段分桶</h2>
+    <div class="row"><input id="datasetIdInput" placeholder="dataset id" style="min-width:360px"><button onclick="analyzeDataset()">分析</button><select id="stageFilter"><option value="">全部阶段</option><option>source</option><option>nfc-initial</option><option>case-fold</option><option>strip-default-ignorable</option><option>nfc-final</option></select></div>
+    <div id="analysisView"></div>
+  </section>
+  <section>
+    <h2>迁移方案</h2>
+    <div class="row">
+      <select id="fromTable"><option value="u16-0">新规则 16.0.0</option><option value="u15-1">基线 15.1.0</option></select>
+      <button onclick="createPlan()">创建方案</button>
+      <input id="planId" placeholder="plan id" style="min-width:360px">
+      <button onclick="loadPlan()">读取</button><button onclick="approvePlan()">批准</button><button onclick="rejectPlan()">拒绝</button><button onclick="applyPlan()">原子应用模拟</button><button onclick="exportPlan()">导出</button>
+    </div>
+    <textarea id="decisions" placeholder='决定 JSON，例如 {"strasse":{"action":"rename","replacements":{"r3":"x","r4":"y"},"keep_old_alias":false}}' style="margin-top:10px"></textarea>
+    <pre id="planResult"></pre>
+  </section>
+</main>
+<script>
+let lastAnalysis=null;
+let lastPlan=null;
+function rules(versionId){return {unicode_table:document.getElementById(versionId||'table').value,normalization:document.getElementById('norm').value,case_fold:document.getElementById('fold').checked,strip_default_ignorable:document.getElementById('ignore').checked,script_policy:document.getElementById('script').value,allowed_scripts:document.getElementById('allowed').value.split(',').map(x=>x.trim()).filter(Boolean)}}
+async function post(url,data,idem){const h={'Content-Type':'application/json'};if(idem)h['Idempotency-Key']=idem;return (await fetch(url,{method:'POST',headers:h,body:JSON.stringify(data)})).json()}
+async function runQuery(){const j=await post('/api/analyze',{rules:rules(),query:document.getElementById('query').value});document.getElementById('queryResult').textContent=JSON.stringify(j,null,2)}
+async function createDataset(){const records=JSON.parse(document.getElementById('import').value);const j=await post('/api/datasets',{name:document.getElementById('datasetName').value,records},'demo-import-'+document.getElementById('datasetName').value);document.getElementById('datasetResult').textContent=JSON.stringify(j,null,2);if(j.id)document.getElementById('datasetIdInput').value=j.id}
+async function refreshDatasets(){const j=await (await fetch('/api/datasets')).json();document.getElementById('datasetResult').textContent=JSON.stringify(j,null,2)}
+function cp(stage){return stage.codepoints.map(x=>x.hex+' '+(x.character?'('+x.character+')':'')).join(' ')}
+async function analyzeDataset(){const id=encodeURIComponent(document.getElementById('datasetIdInput').value);const params=new URLSearchParams({rules:JSON.stringify(rules())});const j=await (await fetch(`/api/datasets/${id}/analyze?${params}`)).json();lastAnalysis=j;renderAnalysis()}
+function renderAnalysis(){if(!lastAnalysis)return;const f=document.getElementById('stageFilter').value;let html='<h3>冲突候选桶</h3><table><tr><th>规范值</th><th>码点</th><th>记录</th></tr>';for(const b of lastAnalysis.buckets){html+=`<tr class="${b.record_ids.length>1?'warn':''}"><td>${b.canonical}</td><td>${b.canonical_hex.join(' ')}</td><td>${b.record_ids.join(', ')}</td></tr>`}html+='</table><h3>记录阶段</h3>';for(const r of lastAnalysis.records){html+=`<details><summary><b>${r.record_id}</b> ${r.eligible?'<span class="pill ok">可入桶</span>':'<span class="pill bad">已分离</span>'} ${r.mixed_script?'<span class="pill warn">混合脚本</span>':''}</summary><p>原文 Base64: <code>${r.original_base64}</code></p>`;for(const s of r.stages){if(!f||f===s.name)html+=`<h4>${s.name} <small>${s.rule_version}</small></h4><pre>${cp(s)}</pre>`}html+=`<p>${r.issues.map(i=>`<span class="pill bad">${i.kind}: ${i.message}</span>`).join('')}</p></details>`}document.getElementById('analysisView').innerHTML=html}
+document.getElementById('stageFilter').onchange=renderAnalysis;
+function decisionsFromForm(){const text=document.getElementById('decisions').value.trim();return text?JSON.parse(text):{}}
+function showPlan(j){lastPlan=j;document.getElementById('planResult').textContent=JSON.stringify(j,null,2);if(j.id)document.getElementById('planId').value=j.id;const defaults={};for(const [bucket,records] of Object.entries(j.groups||{})){defaults[bucket]={action:'keep-alias',primary_record_id:records[0],replacements:{},keep_old_alias:false}}if(!document.getElementById('decisions').value)document.getElementById('decisions').value=JSON.stringify(defaults,null,2)}
+async function createPlan(){const id=document.getElementById('datasetIdInput').value;showPlan(await post('/api/plans',{dataset_id:id,expected_dataset_version:1,from_rules:rules('fromTable'),rules:rules()}))}
+async function updatePlan(status){const id=document.getElementById('planId').value;const expected=lastPlan&&lastPlan.version?lastPlan.version:Number(prompt('expected_version','1'));showPlan(await post(`/api/plans/${id}/decisions`,{expected_version:expected,status,decisions:decisionsFromForm()}))}
+async function loadPlan(){const id=document.getElementById('planId').value;showPlan(await (await fetch(`/api/plans/${id}`)).json())}
+function approvePlan(){updatePlan('approved')}function rejectPlan(){updatePlan('rejected')}
+async function applyPlan(){const id=document.getElementById('planId').value;const expected=lastPlan&&lastPlan.version?lastPlan.version:Number(prompt('expected_version','2'));const j=await post(`/api/plans/${id}/apply`,{expected_version:expected});document.getElementById('planResult').textContent=JSON.stringify(j,null,2);if(j.applied||j.idempotent){await loadPlan()}}
+function exportPlan(){location.href='/api/plans/'+encodeURIComponent(document.getElementById('planId').value)+'/export'}
+</script>
+</body>
+</html>
